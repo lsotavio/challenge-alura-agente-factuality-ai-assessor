@@ -1,0 +1,16 @@
+__pycache__
+*.py[cod]
+.venv/
+.env
+.pytest_cache/
+graphify-out/
+logs/
+tmp/
+.git/
+.gitignore
+.agents/
+knowledge_private/
+**/*.pdf
+!data/sample_factuality_guide.pdf
+**/*.png
+!docs/deploy-oci.png

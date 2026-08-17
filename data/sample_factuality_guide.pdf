@@ -1,0 +1,117 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [ 3 0 R 5 0 R 7 0 R 9 0 R ] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 11 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 956 >>
+stream
+BT
+/F1 11 Tf
+50 750 Td
+14 TL
+(1.0 Overview of Factuality Evaluation) Tj T*
+() Tj T*
+(Factuality assessment is the process of verifying whether verifiable factual claims contained in AI model responses are true, supported by reliable evidence, or inaccurate.) Tj T*
+() Tj T*
+(Assessors must evaluate each checkable claim against high-quality, reputable external sources. Evaluations must distinguish verifiable claims from subjective opinions, pleasantries, and advice.) Tj T*
+() Tj T*
+(2.0 Identifying Claims) Tj T*
+() Tj T*
+(A factual claim is a statement that asserts a verifiable fact about the real world, entities, dates, statistics, scientific principles, historical events, or geographical data.) Tj T*
+() Tj T*
+(- Checkable claims: 'The Denver Nuggets won the 2023 NBA Championship.') Tj T*
+(- Subjective / non-checkable: 'The game was exciting to watch.') Tj T*
+(- Ambiguous context: Assess claims in relation to user query and location.) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 6 0 R /Resources << /Font << /F1 11 0 R >> >> >>
+endobj
+6 0 obj
+<< /Length 837 >>
+stream
+BT
+/F1 11 Tf
+50 750 Td
+14 TL
+(3.0 Researching Claims and Evidence) Tj T*
+() Tj T*
+(Assessors must search for reputable external evidence before making a rating decision.) Tj T*
+() Tj T*
+(Hierarchy of Source Quality:) Tj T*
+(1. Primary / Authoritative Sources: Official government portals \(.gov, .gov.br\), international organizations \(WHO, UN, NASA, NOAA\), official sports leagues \(FIFA, NHL, NBA\), and academic peer-reviewed institutions.) Tj T*
+(2. Reputable Secondary Sources: Established news agencies \(Reuters, AP News, BBC\), major encyclopedias, and recognized educational platforms.) Tj T*
+(3. Low Quality / Unverifiable: Social media posts, user forums, anonymous blogs, and uncorroborated marketing sites.) Tj T*
+() Tj T*
+(Evidence must directly confirm or refute the specific entity and predicate in the claim.) Tj T*
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 8 0 R /Resources << /Font << /F1 11 0 R >> >> >>
+endobj
+8 0 obj
+<< /Length 763 >>
+stream
+BT
+/F1 11 Tf
+50 750 Td
+14 TL
+(4.0 Factuality Rating Scale) Tj T*
+() Tj T*
+(Assign one of the six standard ratings:) Tj T*
+() Tj T*
+(- Accurate: The claim is confirmed by reputable and authoritative evidence.) Tj T*
+(- Inaccurate: The claim is contradicted by reputable and authoritative evidence.) Tj T*
+(- Unsupported: The claim asserts a verifiable fact, but thorough search reveals no reliable corroboration.) Tj T*
+(- Disputed: Authoritative sources directly disagree on the fact with no prevailing consensus.) Tj T*
+(- Can't confidently assess: Available evidence is inaccessible, contradictory without resolution, or insufficient.) Tj T*
+(- No claims present: The sentence contains solely opinions, recommendations, greetings, or non-factual text.) Tj T*
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 10 0 R /Resources << /Font << /F1 11 0 R >> >> >>
+endobj
+10 0 obj
+<< /Length 254 >>
+stream
+BT
+/F1 11 Tf
+50 750 Td
+14 TL
+(5.0 Human Review and Oversight) Tj T*
+() Tj T*
+(The AI agent acts strictly as an assistant providing evidence and suggested ratings. Human assessors maintain final authority and oversight for all submitted ratings.) Tj T*
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000135 00000 n 
+0000000262 00000 n 
+0000001269 00000 n 
+0000001396 00000 n 
+0000002284 00000 n 
+0000002411 00000 n 
+0000003225 00000 n 
+0000003353 00000 n 
+0000003659 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+3730
+%%EOF

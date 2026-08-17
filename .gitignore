@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.streamlit/secrets.toml
+logs/
+knowledge_private/
+tmp/
+
+# Proprietary source material
+*.pdf
+!data/sample_factuality_guide.pdf
+*.png
+!docs/deploy-oci.png
+knowledge_private/
+
+# Local generated indexes, outputs and extracted text
+.pytest_cache/
+graphify-out/
+data/index/
+data/extracted/
+logs/sessions/
+logs/fixture_batch_runs/
+
+# Assignment instructions & local agent config
+.agents/

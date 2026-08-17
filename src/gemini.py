@@ -1,0 +1,248 @@
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from time import perf_counter
+from datetime import datetime, timezone
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from .prompting import build_review_prompt
+from .research import search_claim
+from .schemas import Draft, Task
+
+
+class GeminiClaimReview(BaseModel):
+    claim_id: str
+    rating: Literal[
+        "Inaccurate",
+        "Unsupported",
+        "Disputed",
+        "Accurate",
+        "Can't confidently assess",
+        "No claims present",
+        "Not applicable",
+    ] = Field(description="Use exactly one official factuality rating.")
+    reasoning: str
+    evidence_gaps: list[str] = Field(default_factory=list)
+
+
+class GeminiReview(BaseModel):
+    summary: str
+    final_rating: Literal[
+        "Inaccurate",
+        "Unsupported",
+        "Disputed",
+        "Accurate",
+        "Can't confidently assess",
+        "No claims present",
+        "Not applicable",
+    ] = "Not applicable"
+    severity: str = ""
+    claims: list[GeminiClaimReview] = Field(default_factory=list)
+    evidence_gaps: list[str] = Field(default_factory=list)
+    web_citations: list[dict[str, str | int]] = Field(default_factory=list)
+    search_queries: list[str] = Field(default_factory=list)
+    latency_ms: int = 0
+
+
+class GeminiUnavailable(RuntimeError):
+    pass
+
+
+def gemini_configured() -> bool:
+    return bool(os.getenv("GEMINI_API_KEY", "").strip())
+
+
+def gemini_model() -> str:
+    requested = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    if requested in {"gemini-2.5-flash", "gemini-2.5-flash-lite"}:
+        return "gemini-3.6-flash"
+    return requested
+
+
+def friendly_gemini_error(exc: Exception) -> str:
+    message = str(exc)
+    if "timeout" in message.lower() or "timed out" in message.lower():
+        return "O Gemini ultrapassou o limite de 20 segundos. A chamada foi encerrada; tente novamente mais tarde."
+    if "429" in message or "too_many_requests" in message or "RESOURCE_EXHAUSTED" in message:
+        return (
+            "A cota de inferência da API foi atingida. Aguarde a renovação indicada no Google AI Studio "
+            "ou confira se esta chave pertence ao projeto correto. Nenhuma nova tentativa foi feita automaticamente."
+        )
+    if "404" in message or "not_found" in message.lower():
+        return "O modelo configurado não está disponível para esta chave. O agente usa gemini-3.6-flash por padrão."
+    if "401" in message or "403" in message:
+        return "A chave não tem acesso à API ou ao modelo selecionado. Confira a chave e o projeto no Google AI Studio."
+    return "A análise não pôde ser concluída. Confira a conexão e as configurações da API Gemini."
+
+
+def _load_client():
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError as exc:
+        raise GeminiUnavailable("Instale a dependência google-genai para usar o Gemini.") from exc
+    if not gemini_configured():
+        raise GeminiUnavailable("GEMINI_API_KEY não está configurada.")
+    timeout_ms = int(os.getenv("GEMINI_TIMEOUT_MS", "20000"))
+    return genai.Client(
+        api_key=os.environ["GEMINI_API_KEY"],
+        http_options=types.HttpOptions(
+            timeout=timeout_ms,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        ),
+    )
+
+
+def _parse_review(text: str) -> GeminiReview:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+        cleaned = cleaned.rsplit("```", 1)[0].strip()
+    try:
+        return GeminiReview.model_validate_json(cleaned)
+    except Exception:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start >= 0 and end > start:
+            return GeminiReview.model_validate_json(cleaned[start:end + 1])
+        raise
+
+
+def log_gemini_error(exc: Exception) -> None:
+    path = Path(__file__).resolve().parents[1] / "logs" / "gemini_errors.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "at": datetime.now(timezone.utc).isoformat(),
+        "model": gemini_model(),
+        "error_type": type(exc).__name__,
+        "error": str(exc)[:1500],
+    }
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def review_with_gemini(task: Task) -> GeminiReview:
+    started = perf_counter()
+    model = gemini_model()
+    research = {"queries": [], "results": [], "errors": []}
+    if task.task_type == "factuality" and task.factuality:
+        research = search_claim(
+            task.factuality.target_sentence,
+            task.factuality.user_query,
+            task.factuality.user_location,
+            task.factuality.response_date,
+            max_results=4,
+        )
+    usable_sources = [item for item in research["results"] if item.get("source") != "manual_fallback"]
+    if task.task_type == "factuality" and not usable_sources:
+        return GeminiReview(
+            summary="No directly relevant source was retrieved, so the agent did not guess a rating.",
+            final_rating="Can't confidently assess",
+            claims=[GeminiClaimReview(
+                claim_id="claim_1",
+                rating="Can't confidently assess",
+                reasoning="The automatic research found no source that passed the topical relevance filter.",
+                evidence_gaps=["Find a directly relevant authoritative source."],
+            )],
+            evidence_gaps=["Automatic research returned no directly relevant source."],
+            search_queries=research["queries"],
+            latency_ms=round((perf_counter() - started) * 1000),
+        )
+    client = _load_client()
+    prompt = (
+        build_review_prompt(task)
+        + "\n\nTask payload:\n"
+        + json.dumps(task.model_dump(mode="json"), ensure_ascii=False, indent=2)
+        + "\n\nWeb research retrieved locally:\n"
+        + json.dumps({"sources": usable_sources, "search_errors": research["errors"]}, ensure_ascii=False, indent=2)
+        + "\n\nUse only these retrieved Web sources as factual evidence. "
+        + "Source language is irrelevant: English sources are fully acceptable for a pt-BR task. "
+        + "Prefer primary_authoritative sources over lower-quality sources. A directly relevant official source "
+        + "may be sufficient by itself. Never use a source merely because it shares a date or generic topic word. "
+        + "Do not treat absence of evidence in the task payload as proof that a claim is false. "
+        + "Prefer official and primary sources, verify dates and locations, and distinguish "
+        + "Unsupported from Inaccurate exactly as the guideline defines them. "
+        + "Return only one valid JSON object matching this schema:\n"
+        + json.dumps(GeminiReview.model_json_schema(), ensure_ascii=False)
+        + "\nNever wrap the JSON in Markdown and never invent citations."
+    )
+    request = {
+        "model": model,
+        "input": prompt,
+        "generation_config": {"max_output_tokens": 1400},
+    }
+    if model.startswith("gemini-3"):
+        request["generation_config"]["thinking_level"] = "low"
+        request["response_format"] = {
+            "type": "text",
+            "mime_type": "application/json",
+            "schema": GeminiReview.model_json_schema(),
+        }
+    interaction = client.interactions.create(**request)
+    review = _parse_review(interaction.output_text)
+    review.web_citations = [
+        {
+            "title": item["title"],
+            "url": item["url"],
+            "source_quality": item["source_quality"],
+            "relevance_score": item["relevance_score"],
+        }
+        for item in usable_sources
+    ]
+    review.search_queries = research["queries"]
+    review.latency_ms = round((perf_counter() - started) * 1000)
+    return review
+
+
+def merge_review(base: Draft, review: GeminiReview) -> Draft:
+    """Merge suggestions without replacing deterministic evidence or guardrails."""
+    draft = base.model_copy(deep=True)
+    draft.task_summary = {
+        **draft.task_summary,
+        "gemini_summary": review.summary,
+        "gemini_final_rating": review.final_rating,
+        "gemini_severity": review.severity,
+        "gemini_web_citations": review.web_citations,
+        "gemini_search_queries": review.search_queries,
+        "gemini_latency_ms": review.latency_ms,
+        "ai_provider": "Google Gemini",
+        "human_review_required": True,
+        "gemini_review_status": "pending",
+    }
+    if draft.task_summary.get("task_type") == "Factuality" and review.final_rating != "Not applicable":
+        draft.task_summary["factuality_rating_suggestion"] = review.final_rating
+    by_id = {item.claim_id: item for item in review.claims}
+    citation_evidence = [
+        {
+            "title": source.get("title", ""),
+            "url": source.get("url", ""),
+            "source_quality": source.get("source_quality", "general_web"),
+        }
+        for source in review.web_citations
+    ]
+    for evaluation in draft.result_evaluations:
+        suggestion = by_id.get(evaluation.id)
+        if suggestion:
+            evaluation.reasoning += f" Gemini: {suggestion.reasoning}"
+            evaluation.evidence_required.extend(suggestion.evidence_gaps)
+            if evaluation.factuality_rating is not None and suggestion.rating:
+                evaluation.factuality_rating = suggestion.rating
+            if citation_evidence:
+                evaluation.evidence.extend(citation_evidence)
+                evaluation.evidence_required = [
+                    gap for gap in evaluation.evidence_required
+                    if gap != "Add reputable evidence for this claim."
+                ]
+                if any(source.get("source_quality") == "primary_authoritative" for source in review.web_citations):
+                    evaluation.confidence = "high"
+        elif review.evidence_gaps:
+            evaluation.evidence_required.extend(review.evidence_gaps)
+    draft.human_review_checklist = [
+        "Compare the Gemini suggestion against the task evidence and guideline citations.",
+        *draft.human_review_checklist,
+    ]
+    return draft
