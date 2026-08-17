@@ -15,8 +15,6 @@ FACTUALITY_RATINGS = [
 
 
 def create_draft(task: Task) -> Draft:
-    if task.task_type == "severity":
-        return create_severity_draft(task)
     return create_factuality_draft(task)
 
 
@@ -101,7 +99,7 @@ def create_factuality_draft(task: Task) -> Draft:
             "user_locale": factuality.user_locale,
             "claims_identified": claim_texts,
             "factuality_rating_suggestion": rating,
-            "severity": "Not applicable until an unfactual claim is established",
+
         },
         result_evaluations=claim_evaluations,
         source_citations=source_citations,
@@ -110,50 +108,7 @@ def create_factuality_draft(task: Task) -> Draft:
             "Treat reasonable subjective claims as accurate unless evidence shows otherwise.",
             "Prefer primary, authoritative, current and context-appropriate sources.",
             "Reconcile disagreements; do not label a claim disputed without irreconcilable evidence.",
-            "If inaccurate, assess severity based on harm, centrality, obviousness, sensitivity and mitigation.",
-            "Approve manually; the agent does not submit ratings.",
-        ],
-    )
 
-
-def create_severity_draft(task: Task) -> Draft:
-    severity = task.severity
-    if severity is None:
-        raise ValueError("Severity input is required for a severity task.")
-    if severity.factuality_rating == "Accurate":
-        selected = "Not applicable"
-        reasoning = "Severity is not assigned when the target content is accurate."
-        pending = []
-    else:
-        selected = severity.severity_rating
-        reasoning = (
-            f"Selected severity: {selected}. Assess how the factual issue affects the user's goal, "
-            "especially whether it is central, harmful, obvious or sensitive, and whether hedging or context mitigates it."
-        )
-        pending = [] if severity.impact_notes else ["Explain the relationship between the error and the user's query."]
-    return Draft(
-        task_summary={
-            "task_type": "Severity",
-            "user_query": severity.user_query,
-            "factuality_rating": severity.factuality_rating,
-            "severity_rating": selected,
-            "impact_notes": severity.impact_notes,
-        },
-        result_evaluations=[Evaluation(
-            id="severity_assessment",
-            factuality_rating=severity.factuality_rating,
-            severity_rating=selected,
-            evidence=[severity.evidence_notes] if severity.evidence_notes else [],
-            reasoning=reasoning,
-            confidence="medium" if severity.impact_notes else "low",
-            evidence_required=pending,
-        )],
-        source_citations=[],
-        human_review_checklist=[
-            "Confirm that the target content is actually inaccurate before assigning severity.",
-            "Assess whether the error is central to the user's query.",
-            "Consider harm, obviousness, sensitivity and mitigating language.",
-            "A factual error can be Low severity when it has weak connection to the user's goal.",
             "Approve manually; the agent does not submit ratings.",
         ],
     )

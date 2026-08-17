@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-TaskType = Literal["factuality", "severity"]
+TaskType = Literal["factuality"]
 
 
 class FactualityInput(BaseModel):
@@ -38,13 +38,7 @@ class EvidenceItem(BaseModel):
     snippet: str = ""
 
 
-class SeverityInput(BaseModel):
-    user_query: str
-    target_content: str
-    factuality_rating: str = "Inaccurate"
-    severity_rating: str = "Medium"
-    impact_notes: str = ""
-    evidence_notes: str = ""
+
 
 
 class Task(BaseModel):
@@ -55,13 +49,11 @@ class Task(BaseModel):
     user_location: str = ""
     task_instructions: str = ""
     factuality: FactualityInput | None = None
-    severity: SeverityInput | None = None
 
 
 class Evaluation(BaseModel):
     id: str
     factuality_rating: str | None = None
-    severity_rating: str | None = None
     evidence: list[str | dict] = []
     reasoning: str
     confidence: Literal["high", "medium", "low"]

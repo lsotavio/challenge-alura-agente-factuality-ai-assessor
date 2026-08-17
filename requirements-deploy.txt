@@ -1,0 +1,5 @@
+streamlit>=1.36,<2
+pypdf>=4,<7
+pydantic>=2,<3
+ddgs>=9,<10
+google-genai>=2.0

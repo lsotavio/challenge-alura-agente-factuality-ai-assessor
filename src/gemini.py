@@ -40,7 +40,7 @@ class GeminiReview(BaseModel):
         "No claims present",
         "Not applicable",
     ] = "Not applicable"
-    severity: str = ""
+
     claims: list[GeminiClaimReview] = Field(default_factory=list)
     evidence_gaps: list[str] = Field(default_factory=list)
     web_citations: list[dict[str, str | int]] = Field(default_factory=list)
@@ -205,7 +205,7 @@ def merge_review(base: Draft, review: GeminiReview) -> Draft:
         **draft.task_summary,
         "gemini_summary": review.summary,
         "gemini_final_rating": review.final_rating,
-        "gemini_severity": review.severity,
+
         "gemini_web_citations": review.web_citations,
         "gemini_search_queries": review.search_queries,
         "gemini_latency_ms": review.latency_ms,

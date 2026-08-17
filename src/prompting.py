@@ -26,9 +26,7 @@ Task-specific instructions: {task.task_instructions or 'none'}
 
 Use only the task evidence, supplied Web research and guideline context. Source language
 does not need to match the locale; prioritize directly relevant primary and authoritative
-sources regardless of language. Do not invent page content, research results, claims, or citations. Keep factuality and severity
-separate: factuality asks whether a claim is supported; severity asks how an
-inaccuracy affects the user's intent.
+sources regardless of language. Do not invent page content, research results, claims, or citations.
 
 Guideline context:
 {context}
