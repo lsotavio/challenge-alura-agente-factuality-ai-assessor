@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .assessment import plan_assessment
 from .prompting import build_review_prompt
 from .research import search_claim
 from .schemas import Draft, Task
@@ -128,6 +129,7 @@ def log_gemini_error(exc: Exception) -> None:
 def review_with_gemini(task: Task) -> GeminiReview:
     started = perf_counter()
     model = gemini_model()
+    assessment_plan = plan_assessment(task)
     research = {"queries": [], "results": [], "errors": []}
     if task.task_type == "factuality" and task.factuality:
         research = search_claim(
@@ -135,26 +137,50 @@ def review_with_gemini(task: Task) -> GeminiReview:
             task.factuality.user_query,
             task.factuality.user_location,
             task.factuality.response_date,
-            max_results=4,
+            max_results=assessment_plan.max_results,
+            max_queries=assessment_plan.max_queries,
+            temporal_date=(task.factuality.response_date if assessment_plan.mode == "limited_temporal" else ""),
         )
     usable_sources = [item for item in research["results"] if item.get("source") != "manual_fallback"]
     if task.task_type == "factuality" and not usable_sources:
+        temporal = assessment_plan.mode == "limited_temporal"
+        rating = "Can't confidently assess" if temporal else "Unsupported"
+        if temporal:
+            summary = (
+                "A busca temporal limitada não encontrou um registro confiável que reproduza "
+                "a informação no momento exigido pela tarefa."
+            )
+            reasoning = (
+                "A afirmação é dinâmica e teoricamente verificável, mas não foi recuperada uma "
+                "fonte confiável, diretamente relevante e correspondente à data da avaliação."
+            )
+            gap = "Registro histórico confiável correspondente ao local, à data e ao horário da claim."
+        else:
+            summary = (
+                "A afirmação é compreensível e verificável, mas a busca não encontrou evidência "
+                "confiável que a sustentasse ou contradissesse."
+            )
+            reasoning = (
+                "A pesquisa automática razoável não encontrou fonte reputável de apoio nem de "
+                "contradição; isso caracteriza falta de evidência, não impossibilidade de avaliação."
+            )
+            gap = "Fonte reputável que sustente ou contradiga diretamente a afirmação."
         return GeminiReview(
-            summary="No directly relevant source was retrieved, so the agent did not guess a rating.",
-            final_rating="Can't confidently assess",
+            summary=summary,
+            final_rating=rating,
             claims=[GeminiClaimReview(
                 claim_id="claim_1",
-                rating="Can't confidently assess",
-                reasoning="The automatic research found no source that passed the topical relevance filter.",
-                evidence_gaps=["Find a directly relevant authoritative source."],
+                rating=rating,
+                reasoning=reasoning,
+                evidence_gaps=[gap],
             )],
-            evidence_gaps=["Automatic research returned no directly relevant source."],
+            evidence_gaps=[gap],
             search_queries=research["queries"],
             latency_ms=round((perf_counter() - started) * 1000),
         )
     client = _load_client()
     prompt = (
-        build_review_prompt(task)
+        build_review_prompt(task, assessment_plan)
         + "\n\nTask payload:\n"
         + json.dumps(task.model_dump(mode="json"), ensure_ascii=False, indent=2)
         + "\n\nWeb research retrieved locally:\n"

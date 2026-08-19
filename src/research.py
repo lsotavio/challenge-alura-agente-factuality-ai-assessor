@@ -149,8 +149,28 @@ def _focused_excerpt(content: str, subject: str, limit: int = 3200) -> str:
     return compact[start:start + limit]
 
 
-def search_claim(claim: str, user_query: str = "", location: str = "", response_date: str = "", max_results: int = 5) -> dict:
-    queries = build_queries(claim, user_query, location, response_date)
+def _matches_temporal_date(item: SearchResult, temporal_date: str) -> bool:
+    date_parts = [int(part) for part in re.findall(r"\d+", temporal_date)]
+    if len(date_parts) < 3:
+        return False
+    if len(str(date_parts[0])) == 4:
+        year, month, day = date_parts[:3]
+    else:
+        day, month, year = date_parts[:3]
+    source_numbers = {int(part) for part in re.findall(r"\d+", " ".join([item.title, item.url, item.snippet]))}
+    return {day, month, year}.issubset(source_numbers)
+
+
+def search_claim(
+    claim: str,
+    user_query: str = "",
+    location: str = "",
+    response_date: str = "",
+    max_results: int = 5,
+    max_queries: int = 2,
+    temporal_date: str = "",
+) -> dict:
+    queries = build_queries(claim, user_query, location, response_date)[:max_queries]
     subject = " ".join([user_query, claim]).strip()
     candidates: list[SearchResult] = []
     errors: list[str] = []
@@ -164,7 +184,7 @@ def search_claim(claim: str, user_query: str = "", location: str = "", response_
                         query,
                         region="us-en",
                         backend="brave,yahoo,startpage",
-                        max_results=max(8, max_results * 2),
+                        max_results=max(5, max_results * 2),
                     )
                 except Exception as exc:
                     errors.append(f"Search failed for one query: {type(exc).__name__}")
@@ -179,6 +199,8 @@ def search_claim(claim: str, user_query: str = "", location: str = "", response_
                         continue
                     result.source_quality = source_quality(result.url)
                     result.relevance_score, relevant = _score_result(result, subject, user_query)
+                    if relevant and temporal_date and not _matches_temporal_date(result, temporal_date):
+                        relevant = False
                     if relevant:
                         candidates.append(result)
 
