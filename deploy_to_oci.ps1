@@ -1,13 +1,19 @@
+param(
+    [string]$Ip = "144.22.136.1",
+    [string]$SshKey = ""
+)
+
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $setupScriptPath = Join-Path $projectRoot "deploy\oci\setup_vm.sh"
-$sshKey = "C:\Users\lsota\Downloads\ssh-key-2026-08-17.key"
-$ip = "137.131.162.168"
-$remote = "opc@$ip"
+if ([string]::IsNullOrWhiteSpace($SshKey)) {
+    $SshKey = Read-Host -Prompt "Caminho completo da chave SSH da OCI"
+}
+$remote = "opc@$Ip"
 
-if (-not (Test-Path -LiteralPath $sshKey)) {
-    throw "Chave SSH não encontrada: $sshKey"
+if (-not (Test-Path -LiteralPath $SshKey)) {
+    throw "Chave SSH não encontrada: $SshKey"
 }
 if (-not (Test-Path -LiteralPath $setupScriptPath)) {
     throw "Instalador remoto não encontrado: $setupScriptPath"
@@ -38,7 +44,7 @@ $sshArgs = @(
     "-o", "ServerAliveInterval=15",
     "-o", "ServerAliveCountMax=4",
     "-o", "StrictHostKeyChecking=no",
-    "-i", $sshKey
+    "-i", $SshKey
 )
 
 Write-Host "[1/3] Verificando o SSH..." -ForegroundColor Yellow
@@ -58,7 +64,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "[3/3] Testando a URL pública..." -ForegroundColor Yellow
-$url = "http://${ip}:8501"
+$url = "http://${Ip}:8501"
 try {
     $response = Invoke-WebRequest -UseBasicParsing -Uri "$url/_stcore/health" -TimeoutSec 15
     if ($response.StatusCode -eq 200) {
