@@ -253,16 +253,16 @@ def merge_review(base: Draft, review: GeminiReview) -> Draft:
     for evaluation in draft.result_evaluations:
         suggestion = by_id.get(evaluation.id)
         if suggestion:
-            evaluation.reasoning += f" Gemini: {suggestion.reasoning}"
+            evaluation.reasoning = suggestion.reasoning
+            evaluation.evidence_required = [
+                gap for gap in evaluation.evidence_required
+                if gap != "Add reputable evidence for this claim."
+            ]
             evaluation.evidence_required.extend(suggestion.evidence_gaps)
-            if evaluation.factuality_rating is not None and suggestion.rating:
+            if suggestion.rating:
                 evaluation.factuality_rating = suggestion.rating
             if citation_evidence:
                 evaluation.evidence.extend(citation_evidence)
-                evaluation.evidence_required = [
-                    gap for gap in evaluation.evidence_required
-                    if gap != "Add reputable evidence for this claim."
-                ]
                 if any(source.get("source_quality") == "primary_authoritative" for source in review.web_citations):
                     evaluation.confidence = "high"
         elif review.evidence_gaps:
