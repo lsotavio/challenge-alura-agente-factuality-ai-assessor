@@ -12,6 +12,7 @@ class FactualityInput(BaseModel):
     user_query: str
     response: str
     target_sentence: str
+    highlighted_fragments: list[str] = []
     response_date: str = ""
     user_location: str = ""
     evidence_notes: str = ""

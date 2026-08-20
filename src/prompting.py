@@ -43,6 +43,12 @@ does not need to match the locale; prioritize directly relevant primary and auth
 sources regardless of language. Do not invent page content, research results, claims, or citations.
 
 Rating boundary rules:
+- The highlighted target content is the exclusive rating scope. Surrounding response text supplies
+  context only and must not silently expand the claim being rated.
+- If the highlight contains multiple fragments or atomic facts, evaluate each one. A contradicted
+  target fact makes the overall target Inaccurate even when another target fact is Accurate.
+- A retrieved URL is not evidence by itself. Read its extracted excerpt and compare the exact
+  entity, predicate, number, date, and qualifier against the highlighted content.
 - Can't confidently assess means the claim is theoretically checkable, but the available sources
   cannot support a confident judgment at the required time or with the visible context.
 - Unsupported means the claim is understandable and ordinarily checkable, but reasonable research

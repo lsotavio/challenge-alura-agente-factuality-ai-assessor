@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from io import BytesIO
 from dataclasses import asdict, dataclass
 from urllib.parse import quote_plus, urlparse
 
@@ -74,16 +75,47 @@ def _compact_query(value: str, limit: int = 14) -> str:
         if len(folded) < 3 or folded in STOPWORDS or folded in {_fold(item) for item in candidates}:
             continue
         candidates.append(token)
-    named = [item for item in candidates if item[:1].isupper() or item.isupper() or any(char.isdigit() for char in item)]
-    others = sorted((item for item in candidates if item not in named), key=len, reverse=True)
-    return " ".join((named + others)[:limit])
+    return " ".join(candidates[:limit])
 
 
 def build_queries(claim: str, user_query: str = "", location: str = "", response_date: str = "") -> list[str]:
-    # A concise entity-rich query performs much better than sending a full Portuguese paragraph.
-    combined = " ".join(part for part in [user_query, claim, response_date] if part).strip()
-    queries = [_compact_query(combined), _compact_query(claim)]
+    # Preserve the user's intent before adding distinctive target details. Sorting the whole
+    # sentence by token shape made queries grammatical nonsense and hid the main entity.
+    intent = _compact_query(user_query, 8)
+    target = _compact_query(claim, 9)
+    date_context = _compact_query(response_date, 2)
+    distinctive = re.findall(r"\d[\d.]*[,.:/-]\d+(?:[-/]\d+)*|\b\d{4}\b", claim)
+    quoted = " ".join(f'"{item}"' for item in dict.fromkeys(distinctive[:3]))
+    segments = [part.strip(" -:|\n") for part in re.split(r"[|\n]", claim) if part.strip()]
+    entity_hint = ""
+    for segment in segments:
+        cleaned = re.sub(r"^(?:para\s+o|para\s+a)\s+", "", segment, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^(?:telefone|whatsapp|data|hor[aá]rio)\s*:\s*", "", cleaned, flags=re.IGNORECASE)
+        if 2 <= len(cleaned.split()) <= 8 and not re.fullmatch(r"[\d\W]+", cleaned):
+            entity_hint = f'"{cleaned}"'
+            break
+    queries = [
+        " ".join(part for part in [intent, entity_hint, target, date_context] if part),
+        " ".join(part for part in [intent, quoted] if part) or target,
+    ]
     return [query for query in dict.fromkeys(queries) if query]
+
+
+def _extract_page(client, item: SearchResult, subject: str) -> str:
+    if item.url.lower().split("?", 1)[0].endswith(".pdf"):
+        import requests
+        from pypdf import PdfReader
+
+        response = requests.get(item.url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        reader = PdfReader(BytesIO(response.content))
+        content = " ".join((page.extract_text() or "") for page in reader.pages[:12])
+    else:
+        page = client.extract(item.url, fmt="text_plain")
+        content = str(page.get("content", ""))
+    if content.startswith("%PDF") or content.count("�") > 20:
+        return ""
+    return _focused_excerpt(content, subject)
 
 
 def _hostname(url: str) -> str:
@@ -124,6 +156,11 @@ def _score_result(item: SearchResult, subject: str, user_intent: str = "") -> tu
     direct_overlap = direct_concepts & subject_terms & result_terms
     intent_concepts = direct_concepts & set(_tokens(user_intent)) & result_terms
     title_intent_concepts = direct_concepts & set(_tokens(user_intent)) & set(_tokens(f"{item.title} {item.url}"))
+    intent_terms = set(_tokens(user_intent))
+    intent_overlap = intent_terms & result_terms
+    intent_order = _tokens(user_intent)
+    anchor_terms = set(intent_order[:2])
+    anchor_overlap = anchor_terms & result_terms
     # The user's question carries the main predicate. A page saying who the finalists were
     # is relevant context, but it must rank below a page that answers who actually won.
     score = (
@@ -132,10 +169,17 @@ def _score_result(item: SearchResult, subject: str, user_intent: str = "") -> tu
         + (10 * len(direct_overlap))
         + (25 * len(intent_concepts))
         + (50 * len(title_intent_concepts))
+        + (4 * len(intent_overlap))
         + authority
     )
     # Named entities are a hard topical boundary. "2026" and "liga" cannot turn FIFA into NHL evidence.
-    relevant = len(overlap) >= 2 and (not named or bool(named_overlap)) and item.source_quality != "low_quality"
+    identity_match = not anchor_terms or bool(anchor_overlap) or len(named_overlap) >= 2
+    relevant = (
+        len(overlap) >= 2
+        and identity_match
+        and (not named or bool(named_overlap))
+        and item.source_quality != "low_quality"
+    )
     return score, relevant
 
 
@@ -187,8 +231,17 @@ def search_claim(
                         max_results=max(5, max_results * 2),
                     )
                 except Exception as exc:
-                    errors.append(f"Search failed for one query: {type(exc).__name__}")
-                    continue
+                    errors.append(f"Preferred search backends failed: {type(exc).__name__}")
+                    try:
+                        items = client.text(
+                            query,
+                            region="wt-wt",
+                            backend="auto",
+                            max_results=max(5, max_results * 2),
+                        )
+                    except Exception as fallback_exc:
+                        errors.append(f"Fallback search failed: {type(fallback_exc).__name__}")
+                        continue
                 for raw in items:
                     result = SearchResult(
                         title=raw.get("title", ""),
@@ -209,13 +262,13 @@ def search_claim(
                 reverse=True,
             )
 
-            # Read the best authoritative page. One directly relevant primary source can be sufficient evidence.
-            if candidates and candidates[0].source_quality == "primary_authoritative":
+            # Search snippets are discovery aids, not evidence. Read several strong pages, including
+            # first-party pages that may not use a government or institutional domain.
+            for candidate in candidates[: min(3, max_results)]:
                 try:
-                    page = client.extract(candidates[0].url, fmt="text_plain")
-                    candidates[0].excerpt = _focused_excerpt(str(page.get("content", "")), subject)
+                    candidate.excerpt = _extract_page(client, candidate, subject)
                 except Exception as exc:
-                    errors.append(f"Authoritative page extraction failed: {type(exc).__name__}")
+                    errors.append(f"Page extraction failed for one result: {type(exc).__name__}")
     except Exception as exc:
         errors.append(f"Web search unavailable: {type(exc).__name__}")
 

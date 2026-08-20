@@ -10,8 +10,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from .assessment import plan_assessment
+from .highlights import scoped_target
 from .prompting import build_review_prompt
-from .research import search_claim
+from .research import search_claim, source_quality
 from .schemas import Draft, Task
 
 
@@ -67,7 +68,7 @@ def gemini_model() -> str:
 def friendly_gemini_error(exc: Exception) -> str:
     message = str(exc)
     if "timeout" in message.lower() or "timed out" in message.lower():
-        return "O Gemini ultrapassou o limite de 20 segundos. A chamada foi encerrada; tente novamente mais tarde."
+        return "O Gemini ultrapassou o limite de 45 segundos. A chamada foi encerrada; tente novamente mais tarde."
     if "429" in message or "too_many_requests" in message or "RESOURCE_EXHAUSTED" in message:
         return (
             "A cota de inferência da API foi atingida. Aguarde a renovação indicada no Google AI Studio "
@@ -88,7 +89,7 @@ def _load_client():
         raise GeminiUnavailable("Instale a dependência google-genai para usar o Gemini.") from exc
     if not gemini_configured():
         raise GeminiUnavailable("GEMINI_API_KEY não está configurada.")
-    timeout_ms = int(os.getenv("GEMINI_TIMEOUT_MS", "20000"))
+    timeout_ms = int(os.getenv("GEMINI_TIMEOUT_MS", "45000"))
     return genai.Client(
         api_key=os.environ["GEMINI_API_KEY"],
         http_options=types.HttpOptions(
@@ -126,6 +127,51 @@ def log_gemini_error(exc: Exception) -> None:
         stream.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def _grounding_metadata(interaction) -> tuple[list[dict], list[str]]:
+    """Collect citations and queries emitted by Gemini built-in Web tools."""
+    citations: list[dict] = []
+    queries: list[str] = []
+
+    def visit(value) -> None:
+        if hasattr(value, "model_dump"):
+            value = value.model_dump(mode="json")
+        elif hasattr(value, "__dict__"):
+            value = vars(value)
+        if isinstance(value, list):
+            for item in value:
+                visit(item)
+            return
+        if not isinstance(value, dict):
+            return
+        item_type = str(value.get("type", ""))
+        url = value.get("url") or value.get("uri")
+        if url and item_type in {"url_citation", "google_search_result", "url_context_result"}:
+            citations.append({
+                "title": value.get("title") or value.get("name") or url,
+                "url": url,
+                "source_quality": source_quality(url),
+                "relevance_score": 0,
+            })
+        if item_type in {"google_search_call", "google_search"}:
+            arguments = value.get("arguments") or {}
+            result = value.get("result") or {}
+            if hasattr(result, "model_dump"):
+                result = result.model_dump(mode="json")
+            elif hasattr(result, "__dict__"):
+                result = vars(result)
+            candidates = (
+                arguments.get("queries")
+                or result.get("search_queries")
+                or [arguments.get("query")]
+            )
+            queries.extend(str(query) for query in candidates if query)
+        for nested in value.values():
+            visit(nested)
+
+    visit(interaction)
+    return list({item["url"]: item for item in citations}.values()), list(dict.fromkeys(queries))
+
+
 def review_with_gemini(task: Task) -> GeminiReview:
     started = perf_counter()
     model = gemini_model()
@@ -133,7 +179,7 @@ def review_with_gemini(task: Task) -> GeminiReview:
     research = {"queries": [], "results": [], "errors": []}
     if task.task_type == "factuality" and task.factuality:
         research = search_claim(
-            task.factuality.target_sentence,
+            scoped_target(task.factuality.response, task.factuality.target_sentence),
             task.factuality.user_query,
             task.factuality.user_location,
             task.factuality.response_date,
@@ -142,7 +188,7 @@ def review_with_gemini(task: Task) -> GeminiReview:
             temporal_date=(task.factuality.response_date if assessment_plan.mode == "limited_temporal" else ""),
         )
     usable_sources = [item for item in research["results"] if item.get("source") != "manual_fallback"]
-    if task.task_type == "factuality" and not usable_sources:
+    if task.task_type == "factuality" and not usable_sources and assessment_plan.mode == "limited_temporal":
         temporal = assessment_plan.mode == "limited_temporal"
         rating = "Can't confidently assess" if temporal else "Unsupported"
         if temporal:
@@ -185,7 +231,18 @@ def review_with_gemini(task: Task) -> GeminiReview:
         + json.dumps(task.model_dump(mode="json"), ensure_ascii=False, indent=2)
         + "\n\nWeb research retrieved locally:\n"
         + json.dumps({"sources": usable_sources, "search_errors": research["errors"]}, ensure_ascii=False, indent=2)
-        + "\n\nUse only these retrieved Web sources as factual evidence. "
+        + "\n\nUse the retrieved Web sources plus the enabled Google Search and URL Context tools as factual evidence. "
+        + "The highlighted target fragments are the exclusive rating scope. Use the full response only to "
+        + "interpret those fragments. Never add a location, group, competition, qualifier, or nearby table cell "
+        + "to the rated claim unless that exact text is highlighted. When highlights are discontinuous, assess "
+        + "only the factual relationship jointly expressed by those fragments in context. "
+        + "Inspect each retrieved excerpt, not merely its title or search snippet. If a relevant page was retrieved, "
+        + "do not choose Unsupported before evaluating its extracted page content. Split phone numbers, dates, "
+        + "prices, names, and other independently checkable facts inside the target. If any target subclaim is "
+        + "directly contradicted, the overall rating is Inaccurate and the reasoning must distinguish which parts "
+        + "were confirmed and which were contradicted. "
+        + "You must use Google Search when local retrieval is missing, incomplete, or does not expose the exact "
+        + "highlighted value. Use URL Context to read promising first-party or authoritative pages before rating. "
         + "Source language is irrelevant: English sources are fully acceptable for a pt-BR task. "
         + "Prefer primary_authoritative sources over lower-quality sources. A directly relevant official source "
         + "may be sufficient by itself. Never use a source merely because it shares a date or generic topic word. "
@@ -199,10 +256,11 @@ def review_with_gemini(task: Task) -> GeminiReview:
     request = {
         "model": model,
         "input": prompt,
+        "tools": [{"type": "google_search"}, {"type": "url_context"}],
         "generation_config": {"max_output_tokens": 1400},
     }
     if model.startswith("gemini-3"):
-        request["generation_config"]["thinking_level"] = "low"
+        request["generation_config"]["thinking_level"] = "medium"
         request["response_format"] = {
             "type": "text",
             "mime_type": "application/json",
@@ -210,7 +268,7 @@ def review_with_gemini(task: Task) -> GeminiReview:
         }
     interaction = client.interactions.create(**request)
     review = _parse_review(interaction.output_text)
-    review.web_citations = [
+    local_citations = [
         {
             "title": item["title"],
             "url": item["url"],
@@ -219,7 +277,15 @@ def review_with_gemini(task: Task) -> GeminiReview:
         }
         for item in usable_sources
     ]
-    review.search_queries = research["queries"]
+    grounded_citations, grounded_queries = _grounding_metadata(interaction)
+    # Prefer citations actually returned by Gemini's grounded Google research.
+    # Local DDGS results are only candidates supplied to the model and may be
+    # tangential; expose them in the UI only when grounding returned nothing.
+    selected_citations = grounded_citations or local_citations
+    review.web_citations = list({
+        item["url"]: item for item in selected_citations
+    }.values())
+    review.search_queries = list(dict.fromkeys([*research["queries"], *grounded_queries]))
     review.latency_ms = round((perf_counter() - started) * 1000)
     return review
 
