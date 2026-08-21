@@ -12,16 +12,19 @@ from src.storage import (
 )
 
 
-def test_public_mode_does_not_persist_or_list_tasks(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("PERSIST_TASK_HISTORY", "false")
+def test_task_histories_are_isolated_by_workspace(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(storage, "SESSIONS_DIR", tmp_path)
+    workspace_a = "a" * 32
+    workspace_b = "b" * 32
 
-    path = storage.save_session({"query": "private"}, {"task_summary": {}}, "draft")
+    path = storage.save_session(
+        {"query": "private"}, {"task_summary": {}}, "draft", workspace_id=workspace_a
+    )
 
-    assert path.parent == tmp_path
-    assert not path.exists()
-    assert storage.list_sessions() == []
-    assert list(tmp_path.iterdir()) == []
+    assert path.parent == tmp_path / workspace_a
+    assert path.exists()
+    assert len(storage.list_sessions(workspace_a)) == 1
+    assert storage.list_sessions(workspace_b) == []
 
 
 def test_saved_session_can_restore_the_task_form_and_result() -> None:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import html
+import re
+from uuid import uuid4
 
 import streamlit as st
 
@@ -21,7 +23,6 @@ from src.storage import (
     create_history_export,
     form_state_from_session,
     import_history_export,
-    history_enabled,
     list_sessions,
     save_session,
 )
@@ -106,11 +107,19 @@ st.title("Assistente de Factualidade")
 st.caption("Avaliação assistida de afirmações")
 
 
+def current_workspace_id() -> str:
+    candidate = str(st.query_params.get("workspace", ""))
+    if not re.fullmatch(r"[a-f0-9]{32}", candidate):
+        candidate = uuid4().hex
+        st.query_params["workspace"] = candidate
+    return candidate
+
+
+WORKSPACE_ID = current_workspace_id()
+
+
 def global_history() -> None:
-    if not history_enabled():
-        st.caption("Privacidade: esta demonstração pública não armazena o conteúdo das tarefas.")
-        return
-    sessions = list_sessions()
+    sessions = list_sessions(WORKSPACE_ID)
     with st.expander(f"Histórico de tarefas ({len(sessions)})", expanded=False):
         import_result = st.session_state.pop("history_import_result", None)
         if import_result:
@@ -119,7 +128,7 @@ def global_history() -> None:
                 f" e {import_result['skipped']} já existente(s) ignorada(s)."
             )
         if not sessions:
-            st.caption("Nenhuma tarefa analisada nesta instalação.")
+            st.caption("Nenhuma tarefa registrada neste histórico.")
         else:
             accepted = sum(item.get("draft", {}).get("task_summary", {}).get("gemini_review_status") == "accepted" for item in sessions)
             rejected = sum(item.get("draft", {}).get("task_summary", {}).get("gemini_review_status") in {"rejected", "corrected"} for item in sessions)
@@ -171,7 +180,7 @@ def global_history() -> None:
                 use_container_width=True, key="history_import_button",
             ):
                 try:
-                    result = import_history_export(uploaded_history.getvalue())
+                    result = import_history_export(uploaded_history.getvalue(), WORKSPACE_ID)
                 except HistoryImportError as exc:
                     st.error(str(exc))
                 else:
@@ -260,7 +269,9 @@ if gemini_configured():
                 progress.update(label="Análise concluída", state="complete", expanded=False)
             st.session_state["draft"] = enriched.model_dump()
             st.session_state["task"] = task.model_dump()
-            st.session_state["session_id"] = save_session(st.session_state["task"], st.session_state["draft"], "draft").stem
+            st.session_state["session_id"] = save_session(
+                st.session_state["task"], st.session_state["draft"], "draft", workspace_id=WORKSPACE_ID
+            ).stem
         except GeminiUnavailable as exc:
             st.error(str(exc))
         except Exception as exc:
@@ -271,7 +282,9 @@ else:
     if st.button("Preparar rascunho local", use_container_width=True):
         st.session_state["draft"] = create_draft(task).model_dump()
         st.session_state["task"] = task.model_dump()
-        st.session_state["session_id"] = save_session(st.session_state["task"], st.session_state["draft"], "draft").stem
+        st.session_state["session_id"] = save_session(
+            st.session_state["task"], st.session_state["draft"], "draft", workspace_id=WORKSPACE_ID
+        ).stem
 
 # Render Output Draft & Human Review Loop
 if "draft" in st.session_state:
@@ -333,12 +346,18 @@ if "draft" in st.session_state:
                 if b1.button("Confirmar resultado", key="btn_accept", type="primary", use_container_width=True):
                     summary["gemini_review_status"] = "accepted"
                     st.session_state["draft"] = draft
-                    save_session(st.session_state["task"], draft, "approved", st.session_state.get("session_id"))
+                    save_session(
+                        st.session_state["task"], draft, "approved",
+                        st.session_state.get("session_id"), WORKSPACE_ID,
+                    )
                     st.rerun()
                 if b2.button("Descartar", key="btn_reject", use_container_width=True):
                     summary["gemini_review_status"] = "rejected"
                     st.session_state["draft"] = draft
-                    save_session(st.session_state["task"], draft, "discarded", st.session_state.get("session_id"))
+                    save_session(
+                        st.session_state["task"], draft, "discarded",
+                        st.session_state.get("session_id"), WORKSPACE_ID,
+                    )
                     st.rerun()
 
                 with st.expander("Escolher outra classificação", expanded=False):
@@ -362,7 +381,10 @@ if "draft" in st.session_state:
                         for evaluation in draft.get("result_evaluations", []):
                             evaluation["factuality_rating"] = corr_rating
                         st.session_state["draft"] = draft
-                        save_session(st.session_state["task"], draft, "approved", st.session_state.get("session_id"))
+                        save_session(
+                            st.session_state["task"], draft, "approved",
+                            st.session_state.get("session_id"), WORKSPACE_ID,
+                        )
                         st.rerun()
 
     # Detailed Claims Breakdown

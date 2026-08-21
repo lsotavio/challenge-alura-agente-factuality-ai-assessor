@@ -95,7 +95,7 @@ fi
 step 6 "Saving the secret and configuring the system service"
 decoded_key="$(printf '%s' "$GEMINI_API_KEY_B64" | base64 --decode)"
 sudo install -o root -g opc -m 640 /dev/null "$ENV_FILE"
-printf 'GEMINI_API_KEY=%s\nGEMINI_MODEL=gemini-3.6-flash\nPERSIST_TASK_HISTORY=false\n' "$decoded_key" | sudo tee "$ENV_FILE" >/dev/null
+printf 'GEMINI_API_KEY=%s\nGEMINI_MODEL=gemini-3.6-flash\n' "$decoded_key" | sudo tee "$ENV_FILE" >/dev/null
 sudo chown root:opc "$ENV_FILE"
 sudo chmod 640 "$ENV_FILE"
 unset decoded_key GEMINI_API_KEY_B64

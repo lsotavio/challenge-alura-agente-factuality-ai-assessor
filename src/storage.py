@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,33 +11,43 @@ SESSIONS_DIR = ROOT / "logs" / "sessions"
 HISTORY_FORMAT = "assistente-de-factualidade-history"
 HISTORY_VERSION = 1
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+_WORKSPACE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
 
 
 class HistoryImportError(ValueError):
     pass
 
 
-def history_enabled() -> bool:
-    """Return whether task data may be persisted on this installation."""
-    return os.getenv("PERSIST_TASK_HISTORY", "true").strip().lower() in {"1", "true", "yes", "on"}
+def _workspace_dir(workspace_id: str | None = None) -> Path:
+    if workspace_id is None:
+        return SESSIONS_DIR
+    if not _WORKSPACE_ID_RE.fullmatch(workspace_id):
+        raise ValueError("Identificador de histórico inválido.")
+    return SESSIONS_DIR / workspace_id
 
 
-def save_session(task: dict, draft: dict, status: str = "draft", session_id: str | None = None) -> Path:
+def save_session(
+    task: dict,
+    draft: dict,
+    status: str = "draft",
+    session_id: str | None = None,
+    workspace_id: str | None = None,
+) -> Path:
+    sessions_dir = _workspace_dir(workspace_id)
     session_id = session_id or f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid4().hex[:8]}"
-    path = SESSIONS_DIR / f"{session_id}.json"
-    if not history_enabled():
-        return path
-    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    path = sessions_dir / f"{session_id}.json"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
     payload = {"session_id": session_id, "saved_at": datetime.now(timezone.utc).isoformat(), "status": status, "task": task, "draft": draft}
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
 
 
-def list_sessions() -> list[dict]:
-    if not history_enabled() or not SESSIONS_DIR.exists():
+def list_sessions(workspace_id: str | None = None) -> list[dict]:
+    sessions_dir = _workspace_dir(workspace_id)
+    if not sessions_dir.exists():
         return []
     sessions = []
-    for path in sorted(SESSIONS_DIR.glob("*.json"), reverse=True):
+    for path in sorted(sessions_dir.glob("*.json"), reverse=True):
         try:
             sessions.append(json.loads(path.read_text(encoding="utf-8")))
         except (OSError, json.JSONDecodeError):
@@ -63,7 +72,11 @@ def form_state_from_session(session: dict) -> dict:
     }
 
 
-def create_history_export(sessions: list[dict] | None = None, now: datetime | None = None) -> tuple[str, bytes]:
+def create_history_export(
+    sessions: list[dict] | None = None,
+    now: datetime | None = None,
+    workspace_id: str | None = None,
+) -> tuple[str, bytes]:
     """Create a portable, versioned backup without credentials or application settings."""
     exported_at = now or datetime.now().astimezone()
     payload = {
@@ -71,17 +84,16 @@ def create_history_export(sessions: list[dict] | None = None, now: datetime | No
         "version": HISTORY_VERSION,
         "agent": "Assistente de Factualidade",
         "exported_at": exported_at.isoformat(),
-        "sessions": list_sessions() if sessions is None else sessions,
+        "sessions": list_sessions(workspace_id) if sessions is None else sessions,
     }
     filename = f"assistente-de-factualidade-historico-{exported_at.strftime('%Y-%m-%d_%H-%M-%S')}.json"
     content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
     return filename, content
 
 
-def import_history_export(content: bytes | str) -> dict[str, int]:
+def import_history_export(content: bytes | str, workspace_id: str | None = None) -> dict[str, int]:
     """Validate and merge a history backup, skipping session IDs already stored."""
-    if not history_enabled():
-        raise HistoryImportError("O histórico persistente está desativado nesta instalação pública.")
+    sessions_dir = _workspace_dir(workspace_id)
     raw = content.encode("utf-8") if isinstance(content, str) else content
     if len(raw) > 10 * 1024 * 1024:
         raise HistoryImportError("O arquivo ultrapassa o limite de 10 MB.")
@@ -113,11 +125,11 @@ def import_history_export(content: bytes | str) -> dict[str, int]:
         seen_ids.add(session_id)
         validated.append(session)
 
-    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    sessions_dir.mkdir(parents=True, exist_ok=True)
     imported = 0
     skipped = 0
     for session in validated:
-        path = SESSIONS_DIR / f"{session['session_id']}.json"
+        path = sessions_dir / f"{session['session_id']}.json"
         if path.exists():
             skipped += 1
             continue
