@@ -59,9 +59,10 @@ def gemini_configured() -> bool:
 
 
 def gemini_model() -> str:
-    # Gemini 2.5 Flash keeps Google Search/URL Context while offering a much
-    # larger free allowance than the highly restricted Gemini 3 preview tier.
-    return os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+    requested = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    if requested in {"gemini-2.5-flash", "gemini-2.5-flash-lite"}:
+        return "gemini-3.6-flash"
+    return requested
 
 
 def friendly_gemini_error(exc: Exception) -> str:
@@ -74,7 +75,7 @@ def friendly_gemini_error(exc: Exception) -> str:
             "ou confira se esta chave pertence ao projeto correto. Nenhuma nova tentativa foi feita automaticamente."
         )
     if "404" in message or "not_found" in message.lower():
-        return "O modelo configurado não está disponível para esta chave. O agente usa gemini-2.5-flash por padrão."
+        return "O modelo configurado não está disponível para esta chave. O agente usa gemini-3.6-flash por padrão."
     if "401" in message or "403" in message:
         return "A chave não tem acesso à API ou ao modelo selecionado. Confira a chave e o projeto no Google AI Studio."
     return "A análise não pôde ser concluída. Confira a conexão e as configurações da API Gemini."
