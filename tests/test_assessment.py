@@ -15,7 +15,7 @@ def _task(query: str, response: str, target: str, response_date: str = "") -> Ta
 
 def test_past_weather_forecast_gets_one_bounded_temporal_search():
     task = _task(
-        "clima em Cidade Aurora",
+        "clima em Cidade de Teste",
         "Previsão para hoje e próximos dias.",
         "Fim de semana com chuva e temperatura média de 27°C.",
         "18/02/2026",

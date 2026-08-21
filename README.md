@@ -74,15 +74,11 @@ Principais componentes:
 
 Os nomes permanecem em inglês porque correspondem às opções oficiais da tarefa.
 
-## Exemplos de uso
+## Fluxo de uso
 
-| Consulta | Resultado demonstrado | Justificativa resumida |
-| --- | --- | --- |
-| Previsão meteorológica histórica | `Can't confidently assess` | A claim descreve uma previsão específica já expirada. No contexto operacional e dentro do tempo médio estimado da tarefa (AET), não é humanamente possível reconstruir e verificar com confiança aquela previsão. |
-| Contatos de uma organização fictícia | `Inaccurate` | Uma fonte primária pode confirmar o telefone e contradizer o WhatsApp informado no mesmo trecho. |
-| Valor de anuidade fictícia | `Inaccurate` | Uma publicação oficial pode contradizer diretamente o valor destacado na resposta. |
+O avaliador informa a consulta, a resposta completa, o trecho destacado, a data e a localização quando forem relevantes. O agente pesquisa evidências, consulta as diretrizes recuperadas e apresenta uma classificação sugerida, uma justificativa curta e as fontes utilizadas. A decisão final permanece com o avaliador humano.
 
-Cada resultado apresenta uma classificação sugerida, justificativa curta e fontes consultadas. A decisão final permanece com o avaliador humano. O seletor da interface inclui oito casos inteiramente sintéticos para demonstração e testes de regressão.
+A interface pública não inclui respostas pré-carregadas. Isso evita confundir dados artificiais com demonstrações de capacidade e impede que tarefas privadas sejam distribuídas junto ao projeto.
 
 ## Executar localmente no Windows
 
@@ -132,7 +128,7 @@ Acesse `http://localhost:8501`.
 pytest
 ```
 
-Os testes cobrem schemas, recuperação de diretrizes, pesquisa, integração do Gemini com respostas simuladas e as oito tarefas de demonstração.
+Os testes cobrem schemas, recuperação de diretrizes, pesquisa e integração do Gemini com respostas simuladas. Esses testes validam o comportamento do software sem consumir cota da API e não são apresentados como avaliações factuais reais.
 
 ## Deploy na OCI
 

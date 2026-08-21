@@ -31,7 +31,7 @@ def test_saved_session_can_restore_the_task_form_and_result() -> None:
             "query": "fallback query",
             "user_location": "",
             "factuality": {
-                "user_query": "clima em Cidade Aurora",
+                "user_query": "clima em Cidade de Teste",
                 "response": "Resposta completa",
                 "target_sentence": "Trecho destacado",
                 "response_date": "18/02/2026",
@@ -44,13 +44,12 @@ def test_saved_session_can_restore_the_task_form_and_result() -> None:
 
     restored = form_state_from_session(session)
 
-    assert restored["f_query"] == "clima em Cidade Aurora"
+    assert restored["f_query"] == "clima em Cidade de Teste"
     assert restored["f_response"] == "Resposta completa"
     assert restored["f_target"] == "Trecho destacado"
     assert restored["f_location"] == ""
     assert restored["draft"] == session["draft"]
     assert restored["session_id"] == "session-123"
-    assert restored["fixture_selector"] == "manual"
 
 
 def test_history_export_has_versioned_format_and_timestamped_name() -> None:

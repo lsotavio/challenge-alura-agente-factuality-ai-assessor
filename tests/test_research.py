@@ -6,17 +6,17 @@ from src.schemas import EvidenceItem
 
 
 def test_build_queries_includes_task_context():
-    queries = build_queries("temperatura média de 24C", "clima em Cidade Aurora", "", "15/03/2025")
-    assert "Aurora" in queries[0]
+    queries = build_queries("temperatura média de 24C", "clima em Cidade de Teste", "", "15/03/2025")
+    assert "Cidade Teste" in queries[0]
     assert "temperatura" in queries[0]
 
 
 def test_build_queries_keeps_distinctive_amount_for_fact_checking():
     queries = build_queries(
         "A anuidade para novos inscritos é de R$ 480,00 em 2025.",
-        "anuidade conselho profissional alfa 2025",
+        "anuidade conselho de teste 2025",
     )
-    assert queries[0].startswith("anuidade conselho profissional alfa 2025")
+    assert queries[0].startswith("anuidade conselho teste 2025")
     assert any('"480,00"' in query for query in queries)
 
 
@@ -62,12 +62,12 @@ def test_temporal_search_rejects_current_page_without_task_date(monkeypatch):
         def text(self, *args, **kwargs):
             return [
                 {
-                    "title": "Previsão do tempo em Cidade Aurora hoje",
+                    "title": "Previsão do tempo em Cidade de Teste hoje",
                     "href": "https://example.com/clima/cidade-aurora",
-                    "body": "Temperatura e chuva em Cidade Aurora nesta semana.",
+                    "body": "Temperatura e chuva em Cidade de Teste nesta semana.",
                 },
                 {
-                    "title": "Previsão emitida em 15/03/2025 para Cidade Aurora",
+                    "title": "Previsão emitida em 15/03/2025 para Cidade de Teste",
                     "href": "https://example.gov.br/arquivo/2025/03/15/cidade-aurora",
                     "body": "Boletim histórico de 15 de março de 2025.",
                 },
@@ -79,7 +79,7 @@ def test_temporal_search_rejects_current_page_without_task_date(monkeypatch):
     monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=FakeDDGS))
     result = search_claim(
         "Previsão de chuva com temperatura média de 24°C.",
-        "clima em Cidade Aurora",
+        "clima em Cidade de Teste",
         response_date="15/03/2025",
         max_results=2,
         max_queries=1,
@@ -148,7 +148,7 @@ def test_first_party_general_web_page_is_extracted_before_rating(monkeypatch):
 
         def text(self, *args, **kwargs):
             return [{
-                "title": "Contato | Clínica Horizonte",
+                "title": "Contato | Entidade de Teste",
                 "href": "https://clinicahorizonte.example/contato/",
                 "body": "Telefone e WhatsApp para atendimento.",
             }]
@@ -159,7 +159,7 @@ def test_first_party_general_web_page_is_extracted_before_rating(monkeypatch):
     monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=FakeDDGS))
     result = search_claim(
         "Telefone 00 3000-1000 WhatsApp 00 90000-1000",
-        "telefone Clínica Horizonte",
+        "telefone Entidade de Teste",
         max_results=3,
     )
 

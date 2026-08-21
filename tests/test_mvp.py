@@ -21,8 +21,8 @@ def test_factuality_preserves_rater_hub_context_fields():
     task = Task(
         task_type="factuality",
         factuality=FactualityInput(
-            user_query="clima em Cidade Aurora",
-            response="O clima em Cidade Aurora está quente. Fim de semana: temperatura média de 24C.",
+            user_query="clima em Cidade de Teste",
+            response="O clima em Cidade de Teste está quente. Fim de semana: temperatura média de 24C.",
             target_sentence="Fim de semana: temperatura média de 24C.",
             response_date="18/02/2026",
             user_location="",
@@ -59,7 +59,7 @@ def test_general_evidence_is_attached_to_highlighted_claim():
     task = Task(
         task_type="factuality",
         factuality=FactualityInput(
-            user_query="clima em Cidade Aurora",
+            user_query="clima em Cidade de Teste",
             response="context",
             target_sentence="Fim de semana com 27C",
             factuality_rating="Can't confidently assess",

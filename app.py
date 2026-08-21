@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import html
-import json
-from pathlib import Path
 
 import streamlit as st
 
@@ -108,29 +106,6 @@ st.title("Assistente de Factualidade")
 st.caption("Avaliação assistida de afirmações")
 
 
-def fixture_data() -> dict[str, dict]:
-    path = Path(__file__).parent / "data" / "factuality_test_tasks.json"
-    if not path.exists():
-        return {}
-    return {item["id"]: item for item in json.loads(path.read_text(encoding="utf-8"))}
-
-
-def load_fixture() -> None:
-    selected = st.session_state.get("fixture_selector")
-    item = fixture_data().get(selected)
-    if not item:
-        return
-    for key, value in {
-        "f_query": item.get("user_query", ""),
-        "f_response": item.get("response", ""),
-        "f_target": item.get("target_sentence", ""),
-        "f_location": item.get("user_location", ""),
-        "f_locale": item.get("user_locale", "Portuguese (BR)"),
-        "f_date": item.get("response_date", ""),
-    }.items():
-        st.session_state[key] = value
-
-
 def global_history() -> None:
     if not history_enabled():
         st.caption("Privacidade: esta demonstração pública não armazena o conteúdo das tarefas.")
@@ -205,20 +180,6 @@ def global_history() -> None:
 
 
 global_history()
-
-fixtures = fixture_data()
-options = ["manual", *fixtures.keys()]
-fixture_labels = {
-    fixture_id: f"Exemplo {index}: {item['user_query']}"
-    for index, (fixture_id, item) in enumerate(fixtures.items(), start=1)
-}
-st.selectbox(
-    "Tarefa de exemplo",
-    options,
-    key="fixture_selector",
-    format_func=lambda value: fixture_labels.get(value, "Preencher nova tarefa"),
-    on_change=load_fixture,
-)
 
 c1, c2, c3 = st.columns([2, 1, 1])
 query = c1.text_input("Consulta do usuário", key="f_query", placeholder="Ex.: Quem ganhou o título de 2023?")

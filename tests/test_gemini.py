@@ -100,14 +100,14 @@ def test_gemini_searches_web_and_extracts_citations(monkeypatch):
 
     monkeypatch.setattr(gemini_module, "_load_client", lambda: SimpleNamespace(interactions=FakeInteractions()))
     monkeypatch.setattr(gemini_module, "search_claim", lambda *args, **kwargs: {
-        "queries": ["Equipe Azul Equipe Verde 19 junho 2026"],
+        "queries": ["Equipe A Equipe B 19 junho 2026"],
         "results": [{"title": "FIFA", "url": "https://www.fifa.com/example", "snippet": "Official schedule", "source": "web", "source_quality": "primary_authoritative", "relevance_score": 12}],
         "errors": [],
     })
     task = Task(task_type="factuality", factuality=FactualityInput(
-        user_query="com quem a Equipe Azul vai jogar",
-        response="A Equipe Azul enfrenta a Equipe Verde.",
-        target_sentence="A Equipe Azul enfrenta a Equipe Verde em 19 de junho de 2026.",
+        user_query="com quem a Equipe A vai jogar",
+        response="A Equipe A enfrenta a Equipe B.",
+        target_sentence="A Equipe A enfrenta a Equipe B em 19 de junho de 2026.",
     ))
     review = gemini_module.review_with_gemini(task)
     assert captured["response_format"]["mime_type"] == "application/json"
@@ -116,7 +116,7 @@ def test_gemini_searches_web_and_extracts_citations(monkeypatch):
     assert captured["generation_config"]["max_output_tokens"] == 1400
     assert captured["tools"] == [{"type": "google_search"}, {"type": "url_context"}]
     assert review.final_rating == "Accurate"
-    assert review.search_queries == ["Equipe Azul Equipe Verde 19 junho 2026"]
+    assert review.search_queries == ["Equipe A Equipe B 19 junho 2026"]
     assert review.web_citations == [{"title": "FIFA", "url": "https://www.fifa.com/example", "source_quality": "primary_authoritative", "relevance_score": 12}]
 
 
@@ -130,7 +130,7 @@ def test_grounded_citations_replace_unverified_local_candidates(monkeypatch):
         steps=[SimpleNamespace(
             type="google_search",
             result=SimpleNamespace(
-                search_queries=["site:fifa.com Equipe Azul Equipe Dourada 20 June 2026"],
+                search_queries=["site:example.org Equipe A Equipe B 20 June 2026"],
             ),
         )],
         outputs=[SimpleNamespace(
@@ -138,7 +138,7 @@ def test_grounded_citations_replace_unverified_local_candidates(monkeypatch):
             annotations=[SimpleNamespace(
                 type="url_citation",
                 url="https://www.fifa.com/official-match",
-                title="Equipe Azul v Equipe Dourada | Federação",
+                title="Equipe A v Equipe B | Fonte de teste",
             )],
         )],
     )
@@ -149,7 +149,7 @@ def test_grounded_citations_replace_unverified_local_candidates(monkeypatch):
 
     monkeypatch.setattr(gemini_module, "_load_client", lambda: SimpleNamespace(interactions=FakeInteractions()))
     monkeypatch.setattr(gemini_module, "search_claim", lambda *args, **kwargs: {
-        "queries": ["Equipe Azul Equipe Dourada"],
+        "queries": ["Equipe A Equipe B"],
         "results": [{
             "title": "Irrelevant local candidate",
             "url": "https://example.com/unrelated",
@@ -161,10 +161,10 @@ def test_grounded_citations_replace_unverified_local_candidates(monkeypatch):
         "errors": [],
     })
     task = Task(task_type="factuality", factuality=FactualityInput(
-        user_query="agenda da equipe azul",
-        response="20/06/2026 | Equipe Dourada | Arena Central | Grupo L",
-        target_sentence="20/06/2026\nEquipe Dourada",
-        highlighted_fragments=["20/06/2026", "Equipe Dourada"],
+        user_query="agenda da equipe A",
+        response="20/06/2026 | Equipe B | Arena de Teste | Grupo L",
+        target_sentence="20/06/2026\nEquipe B",
+        highlighted_fragments=["20/06/2026", "Equipe B"],
     ))
 
     review = gemini_module.review_with_gemini(task)
@@ -211,14 +211,14 @@ def test_past_weather_without_historical_source_is_cant_confidently_assess(monke
     def fake_search(*args, **kwargs):
         captured.update(kwargs)
         return {
-            "queries": ["clima Cidade Aurora 15/03/2025 previsão fim de semana"],
+            "queries": ["clima Cidade de Teste 15/03/2025 previsão fim de semana"],
             "results": [{"title": "manual", "url": "https://google.com", "source": "manual_fallback"}],
             "errors": [],
         }
 
     monkeypatch.setattr(gemini_module, "search_claim", fake_search)
     task = Task(task_type="factuality", factuality=FactualityInput(
-        user_query="clima em Cidade Aurora",
+        user_query="clima em Cidade de Teste",
         response="Previsão para hoje e próximos dias.",
         target_sentence="Fim de semana com chuva e temperatura média de 24°C.",
         response_date="15/03/2025",

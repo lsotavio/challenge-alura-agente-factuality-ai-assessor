@@ -57,7 +57,6 @@ def form_state_from_session(session: dict) -> dict:
         "f_location": factuality.get("user_location") or task.get("user_location") or "",
         "f_locale": factuality.get("user_locale") or "Portuguese (BR)",
         "f_date": factuality.get("response_date") or "",
-        "fixture_selector": "manual",
         "task": task,
         "draft": session.get("draft") or {},
         "session_id": session.get("session_id") or "",
