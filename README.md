@@ -149,10 +149,3 @@ A porta TCP `8501` deve estar liberada na VCN da OCI. A chave Gemini é solicita
 ## Contexto educacional da infraestrutura
 
 O desafio não forneceu créditos ou acesso pago a uma API de LLM; a integração utiliza o free tier do Google AI Studio e está sujeita aos respectivos limites de uso. A instância OCI Always Free de 1 GB também exigiu um deploy leve com swap e `systemd`, sem Docker em produção. Essas condições podem limitar testes contínuos, mas não alteram a arquitetura demonstrada.
-
-## Segurança e limitações
-
-- Não envie chaves de API ao repositório.
-- O resultado é uma sugestão e requer revisão humana.
-- Fontes em português e inglês são aceitas; autoridade e relação com a afirmação têm prioridade sobre idioma.
-- Conteúdo das diretrizes privadas não é publicado integralmente no repositório.
